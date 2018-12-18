@@ -1,0 +1,23 @@
+{
+  "name": "dopees-chain-polymer",
+  "version": "0.0.1",
+  "description": "dopees-chain-polymer",
+  "main": "lib/polymer.js",
+  "types": "lib/polymer.d.ts",
+  "author": "",
+  "license": "MIT",
+  "flat": true,
+  "devDependencies": {
+    "@babel/core": "7.2.0",
+    "@babel/traverse": "7.1.6",
+    "@babel/types": "7.2.0",
+    "@types/node": "^10.12.11",
+    "@types/mkdirp": "0.5.2",
+    "dopees-chain": "artyomszasa/dopees-chain",
+    "dopees-chain-sass": "artyomszasa/dopees-chain-sass",
+    "dopees-chain-pug": "artyomszasa/dopees-chain-pug",
+    "dopees-chain-typescript": "artyomszasa/dopees-chain-typescript",
+    "mkdirp": "0.5.1",
+    "typescript": "3.1.6"
+  }
+}

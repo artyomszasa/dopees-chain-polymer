@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "*": ["types/*"] },
+    "lib": ["es6", "dom", "esnext.asynciterable"],
+    "target": "esnext",
+    "module": "commonjs",
+    "declaration": true,
+    "outDir": "./lib",
+    "strict": true,
+    "inlineSourceMap": true,
+    "moduleResolution": "node"
+  },
+  "include": ["src", "types"],
+  "exclude": ["node_modules", "**/__tests__/*"]
+}
