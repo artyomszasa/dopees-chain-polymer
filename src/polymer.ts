@@ -19,7 +19,9 @@ export interface Options {
   sourceRoot: string;
   targetRoot: string;
   buildRoot?: string;
-  cwd?: string
+  cwd?: string;
+  /** When _true_ all deep dependencies are rewritten with respoct to the target directory. */
+  application?: boolean;
 }
 
 const toAbsolutePath = (path: string, base: string) => {
@@ -205,12 +207,14 @@ export class PolymerProject {
   targetRoot: string;
   buildRoot: string;
   cwd: string;
+  application: boolean;
   taskName = 'dopees-polymer';
   constructor(config: Options) {
     this.cwd = config.cwd || process.cwd();
     this.buildRoot = toAbsolutePath(config.buildRoot || './.build', this.cwd);
     this.sourceRoot = toAbsolutePath(config.sourceRoot, this.cwd);
     this.targetRoot = toAbsolutePath(config.targetRoot, this.cwd);
+    this.application = config.application !== false;
   }
   private async getTargets() {
     const targets : Target[] = [];
@@ -244,7 +248,7 @@ export class PolymerProject {
       sourceExt: 'pug',
       targetExt: 'html'
     });
-    return Executors.combine([
+    const executors = [
       sass({
         sourceRoot: fspath.relative(this.cwd, this.sourceRoot),
         targetRoot: fspath.relative(this.cwd, this.buildRoot),
@@ -269,19 +273,22 @@ export class PolymerProject {
         targetRoot: fspath.relative(this.cwd, this.targetRoot),
         saveAllDependencies: true,
         allDependenciesKey: 'dopees.polymer.dependencies',
-        updateExternalImports: true
+        updateExternalImports: this.application
       }),
       async (task: Task, context: Context) => {
         if (task.name instanceof LogicalName && task.name.name === this.taskName) {
           const targets = await this.getTargets();
           await Promise.all(targets.map(target => context.execute(Task.file(target.path, target.base))));
         }
-      },
-      deploy({
+      }
+    ];
+    if (this.application) {
+      executors.push(deploy({
         targetRoot: this.targetRoot,
         allDependenciesKey: 'dopees.polymer.dependencies',
         buildTaskName: this.taskName
-      })
-    ]);
+      }));
+    }
+    return Executors.combine(executors);
   }
 }
