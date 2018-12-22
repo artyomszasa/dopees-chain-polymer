@@ -70,13 +70,15 @@ const findAllDependencies = (ast: t.Node, action: (source: string) => void) => {
   });
 };
 
+const keyDeepDependencies = 'polymer.deep.depepndencies';
+
 async function resolveDeep(targetRoot: string, npmRoot: string, context: Context, toCopy: Array<{ source: string, target: string }>, path: string) {
   const mtime = await fsmtime(path);
   if (!mtime) {
     throw new Error(`failed to get mtime for ${path}`);
   }
   let deps: string[];
-  const entry = await context.storage.getObject<DeepDependencies>(`!polymer.deep.depepndencies!${path}`);
+  const entry = await context.storage.getObject<DeepDependencies>(`!${keyDeepDependencies}!${path}`);
   if (entry && entry.mtime >= mtime) {
     deps = entry.deps;
   } else {
@@ -102,7 +104,7 @@ async function resolveDeep(targetRoot: string, npmRoot: string, context: Context
     // get dependencies
     deps = [];
     findAllDependencies(ast, dep => deps.push(dep));
-    await context.storage.setObject(`!polymer.deep.depepndencies!${path}`, <DeepDependencies>{ mtime, deps });
+    await context.storage.setObject(`!${keyDeepDependencies}!${path}`, <DeepDependencies>{ mtime, deps });
   }
   // process dependencies
   const deepDependencies: string[] = [];
@@ -125,7 +127,11 @@ async function resolveDeep(targetRoot: string, npmRoot: string, context: Context
         source += '.js';
       }
       if (!toCopy.some(e => e.source === source)) {
-        const target = fspath.normalize(fspath.join(targetRoot, fspath.relative(npmRoot, source)));
+        let target = fspath.normalize(fspath.join(targetRoot, fspath.relative(npmRoot, source)));
+        // same folder dependencies must start with './'
+        if (!target.startsWith('..')) {
+          target = './' + target;
+        }
         toCopy.push({ source, target });
         deepDependencies.push(source);
       }
