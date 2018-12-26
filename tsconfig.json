@@ -8,6 +8,7 @@
     "declaration": true,
     "outDir": "./lib",
     "strict": true,
+    "inlineSources": true,
     "inlineSourceMap": true,
     "moduleResolution": "node"
   },
