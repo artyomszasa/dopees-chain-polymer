@@ -93,6 +93,7 @@ async function resolveDeep(targetRoot: string, npmRoot: string, context: Context
         ast: true,
         root: npmRoot,
         rootMode: 'root',
+        plugins: ['@babel/syntax-dynamic-import'],
         parserOpts: {
           sourceType: 'module'
         }
