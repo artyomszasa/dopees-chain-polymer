@@ -78,11 +78,11 @@ const findAllDependencies = (ast: t.Node, action: (source: string) => void|strin
 
 const keyDeepDependencies = 'polymer.deep.depepndencies';
 
-const update = (source: string, toCopy: Array<{ source: string, dedup?: boolean, ast?: t.Node, target: string }>, target: string, ast?: t.Node) => {
+const update = (source: string, toCopy: Array<{ source: string, dedup?: boolean, ast?: t.Node, target: string }>, target: string, dedup: boolean, ast?: t.Node) => {
   const index = toCopy.findIndex(e => e.source === source);
   if (-1 !== index) {
     const entry = toCopy[index];
-    entry.dedup = true;
+    entry.dedup = entry.dedup || dedup;
     entry.target = target;
     entry.ast = ast || entry.ast;
     return false;
@@ -99,13 +99,17 @@ const fixLocal = (path: string) => {
   return path;
 }
 
-async function resolveDeep(targetRoot: string, npmRoot: string, context: Context, toCopy: Array<{ source: string, dedup?: boolean, ast?: t.Node, target: string }>, path: string) {
+async function resolveDeep(targetRoot: string, npmRoot: string, context: Context, toCopy: Array<{ source: string, dedup?: boolean, ast?: t.Node, target: string }>, path: string, pathTarget: string) {
   const dedup = toCopy.find(e => e.source === path);
-  if (dedup && dedup.dedup) {
-    // console.log(`--------- ${fspath.basename(path)}`)
-    return;
+  if (dedup) {
+    if (dedup.dedup) {
+      // console.log(`--------- ${fspath.basename(path)}`)
+      return;
+    } else {
+      // console.log(`+++++++++ ${fspath.basename(path)}`)
+      dedup.dedup = true;
+    }
   }
-  // console.log(`********** ${fspath.basename(path)}`)
   const mtime = await fsmtime(path);
   if (!mtime) {
     throw new Error(`failed to get mtime for ${path}`);
@@ -143,7 +147,7 @@ async function resolveDeep(targetRoot: string, npmRoot: string, context: Context
   }
   // process dependencies
   let externalDeps : { [key:string]: string|undefined } = {};
-  const deepDependencies: string[] = [];
+  const deepDependencies: { source:string, target:string }[] = [];
   for (const localPath of deps) {
     if (localPath.startsWith('./') || localPath.startsWith('../') || fspath.isAbsolute(localPath)) {
       // in-package dependency
@@ -155,19 +159,24 @@ async function resolveDeep(targetRoot: string, npmRoot: string, context: Context
       if (!localPath.endsWith('.js')) {
         externalDeps[localPath] = localPath + '.js';
       }
-      update(source, toCopy, target);
-      deepDependencies.push(source);
+      update(source, toCopy, target, false);
+      deepDependencies.push({ source, target });
     } else {
       // external dependency
-      let source = fspath.normalize(fspath.join(npmRoot, localPath));
+      let source = fspath.normalize(fspath.join(npmRoot, localPath)); // source = dependency path relative to the npm root
       if (!source.endsWith('.js')) {
         source += '.js';
       }
       let target = fspath.normalize(fspath.join(targetRoot, fspath.relative(npmRoot, source)));
-      // same folder dependencies must start with './'
-      externalDeps[localPath] = fixLocal(fspath.join(fspath.relative(fspath.dirname(source), npmRoot), fspath.relative(targetRoot, target)));
-      update(source, toCopy, target);
-      deepDependencies.push(source);
+      // NOTE: same folder dependencies must start with './'
+      const targetToTargetRoot = fspath.relative(fspath.dirname(pathTarget), targetRoot);
+      let relative = fixLocal(fspath.join(targetToTargetRoot, localPath));
+      if (!relative.endsWith('.js')) {
+        relative += '.js';
+      }
+      externalDeps[localPath] = relative;
+      update(source, toCopy, target, false);
+      deepDependencies.push({ source, target });
     }
   }
   // console.log(`${fspath.basename(path)} => ${deepDependencies}`)
@@ -176,6 +185,7 @@ async function resolveDeep(targetRoot: string, npmRoot: string, context: Context
     // console.log(`${fspath.basename(path)} has external dependencies`);
     // console.log(externalDeps);
     const newAst = t.cloneDeep(ast);
+
     findAllDependencies(newAst, localPath => externalDeps[localPath]);
     const entry = toCopy.find(e => e.source === path);
     if (entry) {
@@ -187,7 +197,7 @@ async function resolveDeep(targetRoot: string, npmRoot: string, context: Context
     // }
   }
   // trigger deep resolve
-  await Promise.all(deepDependencies.map(path => resolveDeep(targetRoot, npmRoot, context, toCopy, path)));
+  await Promise.all(deepDependencies.map(e => resolveDeep(targetRoot, npmRoot, context, toCopy, e.source, e.target)));
 }
 
 function unique<T>(source: T[]): T[] {
@@ -241,7 +251,7 @@ function deploy(opts: DeployOptions): Executor {
       context.log('deploy', task, 'done resolving source dependencies');
       // resolve deep dependencies
       context.log('deploy', task, 'resolving deep dependencies...');
-      await Promise.all(toCopy.map(e => e.source).map(e => resolveDeep(targetRoot, npmRoot, context, toCopy, e)));
+      await Promise.all(toCopy.map(e => resolveDeep(targetRoot, npmRoot, context, toCopy, e.source, e.target)));
       context.log('deploy', task, 'done resolving deep dependencies');
       // copy dependencies
       context.log('deploy', task, 'copying dependencies...');
@@ -264,6 +274,7 @@ function deploy(opts: DeployOptions): Executor {
           const res = await babel.transformFromAstAsync(e.ast, source, babelOptions);
           await fsp.writeFile(e.target, res.code, { encoding: 'utf-8' });
         } else {
+          context.log('deploy', task, `copying ${fspath.basename(e.source)} to ${fspath.relative(opts.targetRoot, e.target)}`)
           await fsp.copyFile(e.source, e.target);
         }
       }));
